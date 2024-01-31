@@ -1,0 +1,293 @@
+
+"""
+# BER for BPSK modulation SISO,SIMO_SC,SIMO_EGC,SIMO_MRC,MISO_EPA,Alamouti,and MISO_MRT
+#  SIMO is Tx 1 and Rx 2 with Rayleigh fading channel
+#  MISO is Tx 2 and Rx 1 with Rayleigh fading channel
+# Unit average transmit energy, i.e., Es = 1
+# Rayleigh fading channel matrix, i.e., ℎij~CN(0,1)
+"""
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Total number of Transmit bits
+N = 10**6
+# Transmitter sends 0 and 1 bits. Randomly bits come; values greater than 0.5 are set to 1, otherwise 0
+bi = (np.random.rand(N) > 0.5).astype(int)
+# Generating -1 and 1 bits that were before 0 and 1
+dbi = 2 * bi - 1
+# SNR values in dB
+SNRdB = np.arange(0, 35, 1)
+# Convert SNR to linear scale
+SNR = 10**(SNRdB / 10)
+# Arrays to store results
+# SISO Errors are storing with length of SNRdB
+Y_SISO_Err = np.zeros(len(SNRdB))
+# SIMO_SC Errors are storing with length of SNRdB
+SIMO_SC_Err = np.zeros(len(SNRdB))
+# SIMO_EGC Errors are storing with length of SNRdB
+SIMO_EGC_Err = np.zeros(len(SNRdB))
+# SIMO_MRC Errors are storing in empty array
+SIMO_MRC_Err = []
+# MISO_EPA Errors are storing in empty array
+EPA_ERR = []
+# MISO_Alamouti Errors are storing in empty array
+Ala_Err = []
+# MISO_EGC Errors are storing in empty array
+EGC_ERR = []
+# for loop for SNRdB
+for k in range(len(SNRdB)):
+    # %%%%%%%%%%%%%%%%%%%%%%%%% SIS0 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # generate Rayleigh random channel variable with 0 mean and 1 variance
+    h_siso = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    # White gaussian complex noise random variable with 0 mean and 1 variance
+    n_siso = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    # pre coder P is Unit average transmit energy, i.e., Es = 1
+    P_siso = 1
+    # Weight matrix W is 1/HP
+    W_siso = 1 / h_siso * P_siso
+    # Receive signals with noise
+    Y_SISO = W_siso * h_siso * P_siso * dbi + W_siso * 10**(-SNRdB[k] / 20) * n_siso
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%% SIM0_SC %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # generate Rayleigh random channel variable with 0 mean and 1 variance
+    h_sc = (1 / np.sqrt(2)) * (np.random.randn(2, N) + 1j * np.random.randn(2, N))
+    # White gaussian complex noise random variable with 0 mean and 1 variance
+    n_sc = (1 / np.sqrt(2)) * (np.random.randn(2, N) + 1j * np.random.randn(2, N))
+    # pre coder P is Unit average transmit energy, i.e., Es = 1
+    p = 1
+    # Receive signals with noise
+    Y = h_sc * p * dbi + 10**(-SNRdB[k] / 20) * n_sc
+    # maximum value index between Y rows of each column
+    max_y_ind = np.argmax(np.abs(Y), axis=0)
+    # maximum val ue between Y rows of each column
+    max_value_Y = Y[max_y_ind, range(N)]
+    # Calculate the magnitude of rows for each column in H channel matrix
+    magnitude_h_sc = np.abs(h_sc)
+    # Find the index of the maximum magnitude between H rows of each column
+    max_magnitude_indices = np.argmax(magnitude_h_sc, axis=0)
+    # Get the corresponding complex value between H rows by the maximum magnitude of H
+    max_complex_values_H = h_sc[max_magnitude_indices, np.arange(h_sc.shape[1])]
+    # Finding maximum values  between Y receive signal rows corresponding of maximum magnitude between H rows of each column
+    max_complex_values_Y = Y[max_magnitude_indices, np.arange(Y.shape[1])]
+    # Equalization at receiver for receive signal by max value of Y divided by max value of H
+    # Weight matrix W is max_complex_values_H * p
+    W = max_complex_values_H * p
+    Y_SC = max_complex_values_Y / W
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%% SIMO_EGC %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # generate 2 Rayleigh random channel variable with 0 mean and 1 variance
+    h_egc1 = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    h_egc2 = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    # 2 White gaussian complex noise random variable with 0 mean and 1 variance
+    n_egc1 = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    n_egc2 = (1 / np.sqrt(2)) * (np.random.randn(1, N) + 1j * np.random.randn(1, N))
+    # pre coder P is Unit average transmit energy, i.e., Es = 1
+    p = 1
+    # Weight matrix W1 is np.exp(1j * np.angle(h_egc1)) * p
+    W1 = np.exp(1j * np.angle(h_egc1)) * p
+    # Weight matrix W2 is np.exp(1j * np.angle(h_egc2)) * p
+    W2 = np.exp(1j * np.angle(h_egc2)) * p
+    # Rx1 antenna and Rx2 antenna respectively y1 and y2 receive signals with noise
+    y1 = h_egc1 * p * dbi + 10**(-SNRdB[k] / 20) * n_egc1
+    y2 = h_egc2 * p * dbi + 10**(-SNRdB[k] / 20) * n_egc2
+    # y1 and y2 receive signal are divided by angle of h1 and h2 channel respectively then both are summing make EGC signal
+    y_egc = y1/W1 + y2/W2
+    # %%%%%%%%%%%%%%%%%%%%%%%%% SIMO_MRC %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Initial error for MRC
+    y_mrc_Err = 0
+    for l in range(len(dbi)):
+        # all bits b1
+        b1 = dbi[l]
+        # generate Rayleigh random channel variable with 0 mean and 1 variance
+        h1 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        h2 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # White gaussian complex noise random variable with 0 mean and 1 variance
+        n1 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        n2 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # pre coder P is Unit average transmit energy, i.e., Es = 1
+        p = 1
+        # receive signal for Rx1 Receive antenna
+        y1_mrc = h1 * p * b1 + (10 ** (-SNRdB[k] / 20)) * n1
+        # receive signal for Rx2 Receive antenna
+        y2_mrc = h2 * p * b1 + (10 ** (-SNRdB[k] / 20)) * n2
+        # Weight matrix W
+        W = (np.conj(h1) * h1 * p + np.conj(h2) * h2 * p)
+        # Equalization for receive signal dbi through channel h1 and h2 and y_mrc result is all of receive signals
+        y_mrc = (np.conj(h1) * y1_mrc + np.conj(h2) * y2_mrc) / W
+
+        # receiver receives real signal part from the transmitter
+        y_mrc_Real = np.real(y_mrc) > 0
+
+        # Counting receive bits errors of MRC
+        num_err = np.sum(bi[l] != y_mrc_Real)
+
+        # counting the error bits for Rx1 and Rx2 antennas
+        y_mrc_Err = y_mrc_Err + num_err
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%% MISO_EPA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Initial error for MISO_EPA
+    y_epa_Err = 0
+    # For loop for signal bits
+    for i in range(0, len(dbi), 1):
+        # transmitting bits
+        x1 = dbi[i]
+        # Generate Rayleigh channel with variance 1
+        h = 1 / np.sqrt(2) * (np.random.randn(1, 2) + 1j * np.random.randn(1, 2))
+        # Generate white Gaussian noise channel with variance 1
+        n = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # pre coder P is Unit average transmit energy, i.e., Es = 1
+        # making zero matrix  2 by 1 for power allocation
+        p = np.zeros((2, 1))
+        p[0, 0] = 1 / np.sqrt(2)
+        p[1, 0] = 1 / np.sqrt(2)
+        # making power allocation matrix 2 by 1
+        p_mtr = p
+        # receive signal for Rx1 Receive antenna
+        y = np.dot(h, (p_mtr * x1)) + 10 ** (-SNRdB[k] / 20) * n
+        # Weight matrix W
+        W = np.dot(h, p_mtr)
+        # Equalization for EPA receive signal
+        y_epa = y / W
+        # Receiver receives the real signal part from the transmitter
+        y_epa_real = (np.real(y_epa) > 0).astype(int)
+        # Counting  receive bits errors of SIMO_MRC
+        num_err1 = np.sum(bi[i] != y_epa_real)
+        y_epa_Err = y_epa_Err + num_err1
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%% MISO_Alamouti %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Initial error for Alamouti Rx0 antenna
+    num_Error = 0
+    # For loop for signal bits
+    for i in range(0, len(dbi), 2):
+        # All bits x0
+        x0 = 1 / np.sqrt(2) * dbi[i]
+        # All bits x1
+        x1 = 1 / np.sqrt(2) * dbi[i + 1]
+        # All conjugate bits of x0
+        x2 = np.conj(x0)
+        # All conjugate bits of x1
+        x3 = -np.conj(x1)
+        # Generate Rayleigh channel with variance 1
+        h0 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        h1 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # Generate white Gaussian noise channel with variance 1
+        n0 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        n1 = 1 / np.sqrt(2) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # Receive signal for Rx0 Receive antenna
+        r0 = h0 * x0 + h1 * x1 + (10 ** (-SNRdB[k] / 20)) * n0
+        r1 = h0 * x3 + h1 * x2 + (10 ** (-SNRdB[k] / 20)) * n1
+
+        # Equalization for Rx0 antenna through channel h0 and y0 result is x0 receive signal,
+        s0 = np.conj(h0) * r0 + h1 * np.conj(r1)
+        y0 = s0 / (np.conj(h0) * h0 + np.conj(h1) * h1)
+        # Equalization for Rx0 antenna through channel h1 and y1 result is x1 receive signal,
+        s1 = np.conj(h1) * r0 - h0 * np.conj(r1)
+        y1 = s1 / (np.conj(h0) * h0 + np.conj(h1) * h1)
+
+        # Receiver Rx0 receives the real signal part from the transmitter
+        y0_real = np.real(y0) > 0
+        y1_real = np.real(y1) > 0
+        # Counting receive bits errors of alamouti
+        num_err0 = np.sum(bi[i] != y0_real)
+        num_err1 = np.sum(bi[i + 1] != y1_real)
+        num_Error += num_err0 + num_err1
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%% MISO_EGC %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # Initial error for MISO_EGC
+    y_egc_Err = 0
+    # For loop for signal bits
+    for i in range(0, len(dbi), 1):
+        # transmitting bits
+        x = dbi[i]
+        # Generate Rayleigh channel with variance 1
+        h = (1 / np.sqrt(2)) * (np.random.randn(1, 2) + 1j * np.random.randn(1, 2))
+        #  White gaussian complex noise random variable with 0 mean and 1 variance
+        n = (1 / np.sqrt(2)) * (np.random.randn(1) + 1j * np.random.randn(1))
+        # Getting only h without angle of h channel
+        hEff = h * np.exp(-1j * np.angle(h))
+        # pre coder P is Unit average transmit energy, i.e., Es = 1
+        # making zero matrix  2 by 1 for power allocation
+        p = np.zeros((2, 1))
+        p[0, 0] = 1 / np.sqrt(2)
+        p[1, 0] = 1 / np.sqrt(2)
+        # making power allocation matrix 2 by 1
+        p_mtr = p
+        # Weight matrix W
+        W = np.dot(hEff, p_mtr)
+        # receive signal for Rx1 Receive antenna
+        y = np.dot(hEff, (p_mtr * x)) + 10 ** (-SNRdB[k] / 20) * n
+        # Equalization for receive signal dbi
+        y_mrt = y / W
+        # Receiver receives the real signal part from the transmitter
+        y_mrt_real = (np.real(y_mrt) > 0).astype(int)
+        # Counting  receive bits errors of SIMO_EGC
+        num_err = np.sum(bi[i] != y_mrt_real)
+        y_egc_Err = y_egc_Err + num_err
+
+    # %%%%%%%%%%% Find out Real part of receive signal from complex receive signal SISO,SIMO_SC,SIMO_EGC %%%%%%%%%%
+    # Real part of SISO signal
+    Y_SISO_real = np.real(Y_SISO) > 0
+    # Real part of SIMO_SC signal
+    Y_SC_Real = np.real(Y_SC) > 0
+    # Real part of SIMO_EGC signal
+    Y_EGC_Real = np.real(y_egc) > 0
+    # %%%%%%%%%%%%%%%%%% Counting Error bits of receive signal SISO,SIMO_SC,SIMO_EGC %%%%%%%%%%%%%%%%%%%%%
+    # Counting SISO receive bits errors
+    Y_SISO_Err[k] = np.sum(bi != Y_SISO_real)
+    # Counting SIMO_SC receive bits errors
+    SIMO_SC_Err[k] = np.sum(bi != Y_SC_Real)
+    # Counting SIMO_EGC receive bits errors
+    SIMO_EGC_Err[k] = np.sum(bi != Y_EGC_Real)
+    # Appending SIMO_MRC errors as an array
+    SIMO_MRC_Err.append(y_mrc_Err)
+    # Appending epa errors as an array
+    EPA_ERR.append(y_epa_Err)
+    # Appending alamouti errors as an array
+    Ala_Err.append(num_Error)
+    # Appending MISO_MRT errors as an array
+    EGC_ERR.append(y_egc_Err)
+
+
+# Simulated BER for SISO 1 antenna
+SISO_BER = Y_SISO_Err / N
+# Theoretical BER for SISO 1 antenna
+Theo_SISO_BER = 0.5 * (1 - np.sqrt(SNR / (SNR + 1)))
+# Simulated BER of SIMO_SC for 2 receive antennas
+SIMO_SC_BER = SIMO_SC_Err / N
+# Theoretical BER of SIMO_SC for 2 receive antennas
+Theo_SIMO_SC_BER = 0.5-np.sqrt(SNR/(1+SNR))+0.5*(np.sqrt(SNR/(2+SNR)))
+# Simulated BER of SIMO_EGC for 2 receive antennas
+SIMO_EGC_BER = SIMO_EGC_Err / N
+# Theoretical BER of SIMO_EGC for 2 receive antennas
+Theo_SIMO_EGC_BER = 0.5*(1-np.sqrt(SNR*(SNR+2))/(SNR+1))
+# Simulated BER of SIMO_MRC for 2 receive antennas
+SIMO_MRC_BER = np.array(SIMO_MRC_Err) / N
+# Theoretical BER of SIMO_MRC for 2 receive antennas
+Theo_SIMO_MRC_BER = (0.5 - 0.5 * np.sqrt(SNR / (1 + SNR)))**2 * (2 + np.sqrt(SNR / (1 + SNR)))
+# Simulated BER of MISO_EPA for 1 receive antennas
+MISO_EPA_BER = np.array(EPA_ERR) / N
+# Simulated BER of MISO_Alamouti for 1 receive antennas
+MISO_Ala_BER = np.array(Ala_Err) / N
+# Simulated BER of MISO_EGC for 1 receive antennas
+MISO_EGC_BER = np.array(EGC_ERR) / N
+# Plotting the results
+plt.close('all')
+plt.figure()
+plt.semilogy(SNRdB, SISO_BER, 'rs-', label='SISO', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, Theo_SISO_BER, 'b>-', label='SISO (Theory)', markersize=6,  linewidth=2)
+plt.semilogy(SNRdB, SIMO_SC_BER, 'mo-', label='SIMO_SC', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, Theo_SIMO_SC_BER, 'g>-', label='SIMO_SC (Theory)', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, SIMO_EGC_BER, 'k<:', label='SIMO_EGC',markersize=6, linewidth=2)
+plt.semilogy(SNRdB, Theo_SIMO_EGC_BER, 'cd--', label='SIMO_EGC (Theory)', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, SIMO_MRC_BER, 'r^:', label='SIMO_MRC', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, Theo_SIMO_MRC_BER, 'bo-', label='SIMO_MRC (Theory)', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, MISO_EPA_BER, 'g^:', label='MISO_EPA', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, MISO_Ala_BER, 'r*-', label='Alamouti', markersize=6, linewidth=2)
+plt.semilogy(SNRdB, MISO_EGC_BER, 'b>-', label='MISO_EGC', markersize=6, linewidth=2)
+plt.axis([0, 25, 1e-5, 1])
+plt.grid(True)
+plt.legend()
+plt.xlabel('SNR, dB')
+plt.ylabel('Bit Error Rate , BER')
+plt.title('BER for BPSK modulation (Rayleigh channel)')
+plt.show()
